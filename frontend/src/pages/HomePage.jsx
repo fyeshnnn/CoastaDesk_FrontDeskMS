@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Search, Shield, Heart, Sun, Award, Users, CheckCircle, Waves, Utensils, Bed, Compass, Camera, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, Search, Shield, Heart, Sun, Award, Users, CheckCircle, Waves, Utensils, Bed, Compass, Camera, X, ChevronLeft, ChevronRight, Minus, Plus, User, Baby } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import "react-datepicker/dist/react-datepicker.css"
 
@@ -10,7 +10,11 @@ function HomePage() {
   const [showCalendarModal, setShowCalendarModal] = useState(false)
   const [checkIn, setCheckIn] = useState(null)
   const [checkOut, setCheckOut] = useState(null)
-  const [availabilityResult, setAvailabilityResult] = useState(null)
+  const [numberOfRooms, setNumberOfRooms] = useState(1)
+  const [adults, setAdults] = useState(2)
+  const [children, setChildren] = useState([])
+  const [searchError, setSearchError] = useState('')
+  
   const [currentMonth, setCurrentMonth] = useState(new Date())
   
   // Sample booked dates (in real app, these would come from database)
@@ -26,15 +30,6 @@ function HomePage() {
     '2025-01-05', '2025-01-06', '2025-01-07'
   ]
 
-  // Sample room availability data
-  const roomAvailability = {
-    single: { total: 7, booked: 3 },
-    hotel: { total: 12, booked: 5 },
-    dormitory: { total: 1, booked: 0 },
-    duplex: { total: 3, booked: 1 },
-    villa: { total: 1, booked: 0 }
-  }
-
   const features = [
     { icon: Waves, title: 'Beach', description: 'Pristine white sand beach with crystal clear waters', color: 'from-blue-500 to-cyan-400' },
     { icon: Utensils, title: 'Food', description: 'Exquisite local and international cuisine', color: 'from-orange-500 to-red-500' },
@@ -43,40 +38,54 @@ function HomePage() {
     { icon: Camera, title: 'Sceneries', description: 'Breathtaking sunsets and tropical landscapes', color: 'from-purple-500 to-pink-500' }
   ]
 
-  const checkAvailability = () => {
-    if (!checkIn || !checkOut) {
-      alert('Please select both check-in and check-out dates')
-      return
-    }
-
-    // Calculate nights
-    const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24))
-    
-    // Check if dates are available (not fully booked)
-    const isAvailable = checkDateRangeAvailability(checkIn, checkOut)
-    
-    setAvailabilityResult({
-      available: isAvailable,
-      checkIn: checkIn,
-      checkOut: checkOut,
-      nights: nights,
-      rooms: roomAvailability
-    })
+  const handleAddChild = () => {
+    setChildren([...children, { id: Date.now(), age: 0 }])
   }
 
-  const checkDateRangeAvailability = (start, end) => {
-    // Simulate availability check
-    // In real app, this would check against database
-    let currentDate = new Date(start)
-    while (currentDate <= end) {
-      const dateStr = currentDate.toISOString().split('T')[0]
-      // Check if date is fully booked
-      if (bookedDates.includes(dateStr)) {
-        return false
-      }
-      currentDate.setDate(currentDate.getDate() + 1)
+  const handleRemoveChild = (childId) => {
+    setChildren(children.filter(child => child.id !== childId))
+  }
+
+  const handleChildAgeChange = (childId, age) => {
+    setChildren(children.map(child => 
+      child.id === childId ? { ...child, age: parseInt(age) } : child
+    ))
+  }
+
+  const handleSearchAvailability = () => {
+    if (!checkIn || !checkOut) {
+      setSearchError('Please select check-in and check-out dates')
+      return
     }
-    return true
+    if (numberOfRooms < 1) {
+      setSearchError('Please select at least 1 room')
+      return
+    }
+    if (adults < 1) {
+      setSearchError('Please select at least 1 adult')
+      return
+    }
+    
+    setSearchError('')
+    
+    // Store search params in localStorage to use on rooms page
+    const searchParams = {
+      checkIn: checkIn.toISOString(),
+      checkOut: checkOut.toISOString(),
+      numberOfRooms,
+      adults,
+      children: children.map(c => ({ age: c.age }))
+    }
+    localStorage.setItem('roomSearchParams', JSON.stringify(searchParams))
+    
+    // Navigate to rooms page
+    navigate('/rooms')
+    setShowAvailabilityModal(false)
+  }
+
+  const handleSeeCalendar = () => {
+    setShowCalendarModal(true)
+    setShowAvailabilityModal(false)
   }
 
   const getDateStatus = (date) => {
@@ -84,19 +93,6 @@ function HomePage() {
     if (bookedDates.includes(dateStr)) return 'booked'
     if (partiallyBookedDates.includes(dateStr)) return 'partial'
     return 'available'
-  }
-
-  const handleBookRoom = () => {
-    navigate('/rooms')
-  }
-
-  const handleSearchAvailability = () => {
-    setShowAvailabilityModal(true)
-  }
-
-  const handleSeeCalendar = () => {
-    setShowCalendarModal(true)
-    setShowAvailabilityModal(false)
   }
 
   const CustomDateInput = ({ value, onClick, placeholder }) => (
@@ -108,37 +104,30 @@ function HomePage() {
     </button>
   )
 
-  const CalendarDayComponent = ({ date }) => {
-    const status = getDateStatus(date)
-    let bgColor = ''
-    let textColor = 'text-gray-700'
-    
-    if (status === 'booked') {
-      bgColor = 'bg-red-500'
-      textColor = 'text-white'
-    } else if (status === 'partial') {
-      bgColor = 'bg-yellow-500'
-      textColor = 'text-white'
-    } else {
-      bgColor = 'bg-green-500'
-      textColor = 'text-white'
-    }
-
-    return (
-      <div className="relative">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${status !== 'available' ? bgColor : ''}`}>
-          <span className={status !== 'available' ? textColor : 'text-gray-700'}>
-            {date.getDate()}
-          </span>
-        </div>
-        {status !== 'available' && (
-          <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[10px] whitespace-nowrap">
-            {status === 'booked' ? '🔴 Booked' : '🟡 Limited'}
-          </div>
-        )}
+  const CounterInput = ({ label, value, onIncrease, onDecrease, min = 0, max = 10 }) => (
+    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+      <span className="text-gray-700 font-medium">{label}</span>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onDecrease}
+          disabled={value <= min}
+          className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <Minus size={16} />
+        </button>
+        <span className="w-8 text-center font-semibold text-lg">{value}</span>
+        <button
+          type="button"
+          onClick={onIncrease}
+          disabled={value >= max}
+          className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <Plus size={16} />
+        </button>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
     <div>
@@ -162,15 +151,8 @@ function HomePage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button 
-                  onClick={handleBookRoom}
+                  onClick={() => setShowAvailabilityModal(true)}
                   className="group px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full font-semibold hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
-                >
-                  <Calendar size={20} />
-                  Book a Room
-                </button>
-                <button 
-                  onClick={handleSearchAvailability}
-                  className="group px-8 py-3 bg-white/20 backdrop-blur-md text-white rounded-full font-semibold hover:bg-white/30 transition-all duration-300 flex items-center justify-center gap-2 border border-white/30"
                 >
                   <Search size={20} />
                   Search Availability
@@ -189,104 +171,136 @@ function HomePage() {
 
       {/* Search Availability Modal */}
       {showAvailabilityModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-800">Check Availability</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Search Availability</h2>
               <button onClick={() => setShowAvailabilityModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={24} />
               </button>
             </div>
             
             <div className="p-6">
-              <div className="grid md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <label className="block text-gray-700 font-medium mb-2">Check-in Date</label>
-                  <DatePicker
-                    selected={checkIn}
-                    onChange={(date) => setCheckIn(date)}
-                    selectsStart
-                    startDate={checkIn}
-                    endDate={checkOut}
-                    minDate={new Date()}
-                    placeholderText="Select check-in date"
-                    customInput={<CustomDateInput placeholder="Select check-in date" />}
-                    className="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700 font-medium mb-2">Check-out Date</label>
-                  <DatePicker
-                    selected={checkOut}
-                    onChange={(date) => setCheckOut(date)}
-                    selectsEnd
-                    startDate={checkIn}
-                    endDate={checkOut}
-                    minDate={checkIn || new Date()}
-                    placeholderText="Select check-out date"
-                    customInput={<CustomDateInput placeholder="Select check-out date" />}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-4 mb-6">
-                <button 
-                  onClick={checkAvailability}
-                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg transition-all duration-300"
-                >
-                  Check Availability
-                </button>
-                <button 
-                  onClick={handleSeeCalendar}
-                  className="flex-1 py-3 border-2 border-amber-500 text-amber-600 rounded-lg font-semibold hover:bg-amber-50 transition-all duration-300"
-                >
-                  See Calendar
-                </button>
-              </div>
-
-              {availabilityResult && (
-                <div className={`p-4 rounded-lg ${availabilityResult.available ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                  <h3 className="font-bold text-lg mb-2">
-                    {availabilityResult.available ? '✅ Rooms Available!' : '❌ No Availability'}
-                  </h3>
-                  {availabilityResult.available ? (
-                    <>
-                      <p className="text-gray-600 mb-3">
-                        {availabilityResult.nights} night(s) from {availabilityResult.checkIn.toLocaleDateString()} to {availabilityResult.checkOut.toLocaleDateString()}
-                      </p>
-                      <div className="space-y-2 mb-4">
-                        <p className="font-semibold">Current Room Availability:</p>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <span>Single Type:</span>
-                          <span>{roomAvailability.single.total - roomAvailability.single.booked} rooms available</span>
-                          <span>Hotel Type:</span>
-                          <span>{roomAvailability.hotel.total - roomAvailability.hotel.booked} rooms available</span>
-                          <span>Dormitory:</span>
-                          <span>{roomAvailability.dormitory.total - roomAvailability.dormitory.booked} available</span>
-                          <span>Duplex Type:</span>
-                          <span>{roomAvailability.duplex.total - roomAvailability.duplex.booked} available</span>
-                          <span>Villa:</span>
-                          <span>{roomAvailability.villa.total - roomAvailability.villa.booked} available</span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          setShowAvailabilityModal(false)
-                          navigate('/rooms')
-                        }}
-                        className="w-full py-2 bg-amber-500 text-white rounded-lg font-semibold hover:bg-amber-600 transition-all"
-                      >
-                        Book Now
-                      </button>
-                    </>
-                  ) : (
-                    <p className="text-gray-600">
-                      Sorry, the selected dates are not available. Please try different dates or check the calendar for availability.
-                    </p>
-                  )}
+              {searchError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                  {searchError}
                 </div>
               )}
+              
+              <div className="space-y-5">
+                {/* Date Selection */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">Check-in Date *</label>
+                    <DatePicker
+                      selected={checkIn}
+                      onChange={(date) => setCheckIn(date)}
+                      selectsStart
+                      startDate={checkIn}
+                      endDate={checkOut}
+                      minDate={new Date()}
+                      placeholderText="Select check-in date"
+                      customInput={<CustomDateInput placeholder="Select check-in date" />}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">Check-out Date *</label>
+                    <DatePicker
+                      selected={checkOut}
+                      onChange={(date) => setCheckOut(date)}
+                      selectsEnd
+                      startDate={checkIn}
+                      endDate={checkOut}
+                      minDate={checkIn || new Date()}
+                      placeholderText="Select check-out date"
+                      customInput={<CustomDateInput placeholder="Select check-out date" />}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Number of Rooms */}
+                <CounterInput
+                  label="Number of Rooms"
+                  value={numberOfRooms}
+                  onIncrease={() => setNumberOfRooms(numberOfRooms + 1)}
+                  onDecrease={() => setNumberOfRooms(numberOfRooms - 1)}
+                  min={1}
+                  max={5}
+                />
+
+                {/* Adults Count */}
+                <CounterInput
+                  label="Adults (18+ years old)"
+                  value={adults}
+                  onIncrease={() => setAdults(adults + 1)}
+                  onDecrease={() => setAdults(adults - 1)}
+                  min={1}
+                  max={20}
+                />
+
+                {/* Children Section */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="flex items-center gap-2">
+                      <Baby size={20} className="text-amber-500" />
+                      <span className="font-medium text-gray-700">Children (0-17 years)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddChild}
+                      className="text-amber-500 hover:text-amber-600 text-sm font-medium flex items-center gap-1"
+                    >
+                      <Plus size={16} /> Add Child
+                    </button>
+                  </div>
+                  
+                  {children.length === 0 && (
+                    <p className="text-gray-400 text-sm text-center py-4">No children added. Click "Add Child" to include children in your booking.</p>
+                  )}
+                  
+                  {children.map((child, index) => (
+                    <div key={child.id} className="flex items-center gap-3 mt-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <label className="block text-xs text-gray-500 mb-1">Child {index + 1} Age</label>
+                        <select
+                          value={child.age}
+                          onChange={(e) => handleChildAgeChange(child.id, e.target.value)}
+                          className="w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                        >
+                          <option value={0}>0 years old</option>
+                          {[...Array(18)].map((_, i) => (
+                            <option key={i} value={i}>{i} years old</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveChild(child.id)}
+                        className="mt-5 p-2 text-red-500 hover:text-red-600"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    onClick={handleSearchAvailability}
+                    className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg transition-all duration-300"
+                  >
+                    Search Available Rooms
+                  </button>
+                  <button 
+                    onClick={handleSeeCalendar}
+                    className="flex-1 py-3 border-2 border-amber-500 text-amber-600 rounded-lg font-semibold hover:bg-amber-50 transition-all duration-300"
+                  >
+                    See Calendar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -294,7 +308,7 @@ function HomePage() {
 
       {/* Calendar Modal */}
       {showCalendarModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-800">Availability Calendar</h2>
@@ -343,17 +357,26 @@ function HomePage() {
                   if (!date) return <span>{day}</span>
                   const status = getDateStatus(date)
                   let bgColor = ''
-                  if (status === 'booked') bgColor = 'bg-red-500 text-white'
-                  else if (status === 'partial') bgColor = 'bg-yellow-500 text-white'
+                  let textColor = 'text-gray-700'
+                  if (status === 'booked') {
+                    bgColor = 'bg-red-500'
+                    textColor = 'text-white'
+                  } else if (status === 'partial') {
+                    bgColor = 'bg-yellow-500'
+                    textColor = 'text-white'
+                  }
                   
                   return (
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bgColor} mx-auto`}>
-                      {day}
+                    <div className="relative">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bgColor} mx-auto`}>
+                        <span className={textColor}>{day}</span>
+                      </div>
                     </div>
                   )
                 }}
               />
 
+              {/* Booking Tips */}
               <div className="mt-6 p-4 bg-amber-50 rounded-lg">
                 <h3 className="font-bold text-gray-800 mb-2">📅 Booking Tips</h3>
                 <ul className="text-sm text-gray-600 space-y-1">
@@ -379,7 +402,7 @@ function HomePage() {
         </div>
       )}
 
-      {/* Rest of your HomePage content remains the same */}
+      {/* Rest of the HomePage content remains the same */}
       {/* Resort Overview Section */}
       <section className="py-20 px-4">
         <div className="container mx-auto max-w-6xl">

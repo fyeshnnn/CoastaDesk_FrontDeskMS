@@ -1,22 +1,27 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Mail, Lock, User, Eye, EyeOff, LogIn } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Mail, Lock, User, Eye, EyeOff, LogIn, ArrowLeft } from 'lucide-react'
 
 function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
   const [loginData, setLoginData] = useState({
     emailOrUsername: '',
     password: ''
   })
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const sampleUsers = [
-  { email: 'staff@costamarina.com', username: 'staff', password: 'staff123', firstName: 'Maria', lastName: 'Santos', role: 'staff' },
-  { email: 'manager@costamarina.com', username: 'manager', password: 'manager123', firstName: 'John', lastName: 'Reyes', role: 'manager' },
-  { email: 'admin@costamarina.com', username: 'admin', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'admin' }
-]
+  // Check for success message from registration
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message)
+      // Clear the message after 5 seconds
+      setTimeout(() => setSuccessMessage(''), 5000)
+    }
+  }, [location])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -28,10 +33,23 @@ function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setError('')
+    setSuccessMessage('')
 
     // Simulate API call
     setTimeout(() => {
-      const foundUser = sampleUsers.find(
+      // Get users from localStorage (from registration)
+      const registeredUsers = JSON.parse(localStorage.getItem('users') || '[]')
+      
+      // Combine sample users with registered users
+      const sampleUsers = [
+        { email: 'staff@costamarina.com', username: 'staff', password: 'staff123', firstName: 'Maria', lastName: 'Santos', role: 'staff' },
+        { email: 'manager@costamarina.com', username: 'manager', password: 'manager123', firstName: 'John', lastName: 'Reyes', role: 'manager' },
+        { email: 'admin@costamarina.com', username: 'admin', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'admin' }
+      ]
+      
+      const allUsers = [...sampleUsers, ...registeredUsers]
+      
+      const foundUser = allUsers.find(
         u => (u.email === loginData.emailOrUsername || u.username === loginData.emailOrUsername) 
         && u.password === loginData.password
       )
@@ -39,34 +57,48 @@ function LoginPage() {
       if (foundUser) {
         // Store user info in localStorage
         localStorage.setItem('user', JSON.stringify({ 
+          id: foundUser.id || Date.now(),
           email: foundUser.email, 
           username: foundUser.username,
           firstName: foundUser.firstName,
           lastName: foundUser.lastName,
-          role: foundUser.role
+          role: foundUser.role || 'customer'
         }))
-        localStorage.setItem('userRole', foundUser.role)
+        localStorage.setItem('userRole', foundUser.role || 'customer')
+        localStorage.setItem('isLoggedIn', 'true')
         
-        // Redirect based on role
-        switch(foundUser.role) {
-          case 'staff':
-            navigate('/staff/dashboard')
-            break
-          case 'manager':
-            navigate('/manager/dashboard')
-            break
-          case 'admin':
-            navigate('/admin/dashboard')
-            break
-          case 'customer':
-          default:
-            navigate('/')
-            break
+        // Check if there's a pending booking
+        const pendingBooking = localStorage.getItem('pendingBooking')
+        
+        if (pendingBooking) {
+          // Clear the pending booking
+          localStorage.removeItem('pendingBooking')
+          setIsLoading(false)
+          // Redirect to rooms page with the booking data
+          const bookingData = JSON.parse(pendingBooking)
+          navigate('/rooms', { state: bookingData })
+        } else {
+          setIsLoading(false)
+          // Redirect based on role
+          switch(foundUser.role) {
+            case 'staff':
+              navigate('/staff')
+              break
+            case 'manager':
+              navigate('/manager')
+              break
+            case 'admin':
+              navigate('/admin')
+              break
+            default:
+              navigate('/')
+              break
+          }
         }
       } else {
         setError('Invalid email/username or password')
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }, 1000)
   }
 
@@ -108,6 +140,15 @@ function LoginPage() {
       {/* Right Side - Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gradient-to-b from-amber-50 to-white">
         <div className="max-w-md w-full">
+          {/* Back Button */}
+          <button 
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-gray-500 hover:text-amber-600 transition-colors mb-6 group"
+          >
+            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            <span>Back to Home</span>
+          </button>
+
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <div className="w-20 h-20 mx-auto mb-3 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
@@ -124,6 +165,13 @@ function LoginPage() {
             </h2>
             <p className="text-gray-500 mt-2">Please sign in to your account</p>
           </div>
+
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm">
+              {successMessage}
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -144,7 +192,8 @@ function LoginPage() {
                   value={loginData.emailOrUsername}
                   onChange={handleInputChange}
                   required
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none"
+                  disabled={isLoading}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="Enter your email or username"
                 />
               </div>
@@ -160,13 +209,15 @@ function LoginPage() {
                   value={loginData.password}
                   onChange={handleInputChange}
                   required
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none"
+                  disabled={isLoading}
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  disabled={isLoading}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -186,10 +237,13 @@ function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Signing in...
+                </>
               ) : (
                 <>
                   <LogIn size={20} />
@@ -208,14 +262,14 @@ function LoginPage() {
             </p>
           </div>
 
-          {/* Demo Credentials */}
-          <div className="mt-8 p-4 bg-amber-50 rounded-lg">
-            <p className="text-sm text-gray-600 text-center font-semibold mb-2">Demo Credentials:</p>
-            <div className="space-y-1 text-sm">
-              <p className="text-gray-600">👤 <span className="font-medium">Customer:</span> jane@example.com / password123</p>
-              <p className="text-gray-600">👤 <span className="font-medium">Staff:</span> john@example.com / password123</p>
-              <p className="text-gray-600">👤 <span className="font-medium">Manager:</span> manager@costamarina.com / manager123</p>
-              <p className="text-gray-600">👤 <span className="font-medium">Admin:</span> admin@costamarina.com / admin123</p>
+          {/* Demo Credentials (for testing) */}
+          <div className="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-500 text-center mb-2">Demo Credentials:</p>
+            <div className="text-xs text-gray-400 text-center space-y-1">
+              <p>Customer: customer@example.com / customer123</p>
+              <p>Staff: staff@costamarina.com / staff123</p>
+              <p>Manager: manager@costamarina.com / manager123</p>
+              <p>Admin: admin@costamarina.com / admin123</p>
             </div>
           </div>
         </div>

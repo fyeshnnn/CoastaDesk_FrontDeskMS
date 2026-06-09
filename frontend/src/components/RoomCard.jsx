@@ -1,12 +1,63 @@
-import { useState } from 'react'
-import { Bed, Users, DollarSign, Calendar, X, CheckCircle, AlertCircle, Phone, BookOpen, ExternalLink } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Bed, Users, DollarSign, Calendar, X, AlertCircle, Phone, BookOpen, User } from 'lucide-react'
 
-const RoomCard = ({ room, type, onBookNow }) => {
+const RoomCard = ({ room, type, searchParams, hasActiveSearch, onModifySearch }) => {
+  const navigate = useNavigate()
   const [showModal, setShowModal] = useState(false)
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
   const [additionalHeads, setAdditionalHeads] = useState(0)
   const [showRules, setShowRules] = useState(false)
+  const [adults, setAdults] = useState(2)
+  const [children, setChildren] = useState([])
+  const [hasValidDates, setHasValidDates] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [bookingData, setBookingData] = useState(null)
+
+  // Load search params from props
+  useEffect(() => {
+    // First try to use searchParams from props
+    let params = searchParams
+    
+    // If no params in props, check localStorage
+    if (!params || !params.checkIn) {
+      const storedParams = localStorage.getItem('roomSearchParams')
+      const hasActive = localStorage.getItem('hasActiveSearch')
+      if (storedParams && hasActive === 'true') {
+        try {
+          params = JSON.parse(storedParams)
+        } catch (e) {
+          console.error('Error parsing stored params', e)
+        }
+      }
+    }
+    
+    if (params && params.checkIn && params.checkOut) {
+      const checkInDate = new Date(params.checkIn)
+      const checkOutDate = new Date(params.checkOut)
+      
+      if (!isNaN(checkInDate.getTime()) && !isNaN(checkOutDate.getTime())) {
+        const formattedCheckIn = checkInDate.toISOString().split('T')[0]
+        const formattedCheckOut = checkOutDate.toISOString().split('T')[0]
+        
+        setCheckIn(formattedCheckIn)
+        setCheckOut(formattedCheckOut)
+        setAdults(params.adults || 2)
+        setChildren(params.children || [])
+        setHasValidDates(true)
+        
+        const totalGuests = (params.adults || 2) + (params.children?.length || 0)
+        if (totalGuests > room.capacity) {
+          setAdditionalHeads(totalGuests - room.capacity)
+        } else {
+          setAdditionalHeads(0)
+        }
+      }
+    } else {
+      setHasValidDates(false)
+    }
+  }, [searchParams, room.capacity])
 
   const calculateTotal = () => {
     let total = room.price
@@ -16,10 +67,91 @@ const RoomCard = ({ room, type, onBookNow }) => {
     return total
   }
 
+  const calculateNights = () => {
+    if (checkIn && checkOut) {
+      const start = new Date(checkIn)
+      const end = new Date(checkOut)
+      const nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+      return nights > 0 ? nights : 1
+    }
+    return 1
+  }
+
+  const totalAmount = calculateTotal() * calculateNights()
+
+  const handleBookNow = () => {
+    // Check if user is logged in
+    const user = localStorage.getItem('user')
+    const userRole = localStorage.getItem('userRole')
+    
+    // Prepare booking data
+    const bookingInfo = {
+      room: room,
+      type: type,
+      checkIn: checkIn,
+      checkOut: checkOut,
+      adults: adults,
+      children: children,
+      nights: calculateNights(),
+      totalAmount: totalAmount,
+      additionalHeads: additionalHeads
+    }
+    
+    if (user && userRole === 'customer') {
+      // User is logged in as customer, proceed with booking
+      proceedWithBooking(bookingInfo)
+    } else if (user && userRole !== 'customer') {
+      // User is logged in as staff/manager/admin - redirect to customer registration
+      alert('Please use a customer account to make bookings. Redirecting to registration...')
+      localStorage.removeItem('user')
+      localStorage.removeItem('userRole')
+      navigate('/register')
+    } else {
+      // No user logged in - show auth modal
+      setBookingData(bookingInfo)
+      setShowAuthModal(true)
+    }
+  }
+
+  const proceedWithBooking = (bookingInfo) => {
+    // Save booking data to localStorage for the booking confirmation page
+    localStorage.setItem('pendingBooking', JSON.stringify(bookingInfo))
+    // Navigate to booking confirmation/payment page
+    alert(`Proceeding to payment for ${room.name}\nTotal: ₱${totalAmount.toLocaleString()}\nCheck-in: ${formatDate(checkIn)}\nCheck-out: ${formatDate(checkOut)}\nGuests: ${adults} adults, ${children.length} children`)
+    // In production, navigate to booking confirmation page:
+    // navigate('/booking/confirmation')
+  }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  const GuestSummary = () => {
+    const totalChildren = children.length
+    const childAges = children.map(c => c.age).join(', ')
+    
+    return (
+      <div className="mt-2 p-2 bg-blue-50 rounded-lg text-sm">
+        <p className="font-medium text-gray-700 flex items-center gap-2">
+          <Users size={14} className="text-blue-500" />
+          Guest Details from Search:
+        </p>
+        <div className="mt-1 text-gray-600">
+          <p>👤 Adults: {adults}</p>
+          {children.length > 0 && (
+            <p>👶 Children: {children.length} ({childAges} yrs)</p>
+          )}
+          <p>📅 {calculateNights()} night(s)</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 overflow-hidden group">
-        {/* Image Placeholder */}
         <div className="h-56 bg-gradient-to-br from-amber-400 to-orange-500 relative overflow-hidden">
           <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-all duration-300"></div>
           <div className="absolute inset-0 flex items-center justify-center">
@@ -46,12 +178,30 @@ const RoomCard = ({ room, type, onBookNow }) => {
             </div>
           </div>
           
+          {hasValidDates && (
+            <div className="mb-3 p-2 bg-blue-50 rounded-lg text-xs">
+              <p className="text-blue-700">📅 {formatDate(checkIn)} - {formatDate(checkOut)}</p>
+              <p className="text-blue-700">👥 {adults} adults, {children.length} children · {calculateNights()} nights</p>
+            </div>
+          )}
+          
           <button 
             onClick={() => setShowModal(true)}
-            className="w-full py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg transition-all duration-300"
+            disabled={!hasValidDates}
+            className={`w-full py-2 rounded-lg font-semibold transition-all duration-300 ${
+              hasValidDates 
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg cursor-pointer' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
           >
             View Details
           </button>
+          
+          {!hasValidDates && (
+            <p className="text-xs text-gray-400 text-center mt-2">
+              Please search for availability first
+            </p>
+          )}
         </div>
       </div>
 
@@ -114,6 +264,8 @@ const RoomCard = ({ room, type, onBookNow }) => {
                       </div>
                     )}
                   </div>
+
+                  {(adults > 0 || children.length > 0) && hasValidDates && <GuestSummary />}
                 </div>
                 
                 {/* Right Column - Booking */}
@@ -124,42 +276,88 @@ const RoomCard = ({ room, type, onBookNow }) => {
                       <div>
                         <label className="block text-sm font-medium mb-1">Check-in:</label>
                         <input 
-                          type="date" 
-                          value={checkIn}
-                          onChange={(e) => setCheckIn(e.target.value)}
-                          className="w-full px-3 py-2 border rounded-lg"
+                          type="text" 
+                          value={formatDate(checkIn)}
+                          readOnly
+                          className="w-full px-3 py-2 border rounded-lg bg-gray-100 cursor-not-allowed"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-1">Check-out:</label>
                         <input 
-                          type="date" 
-                          value={checkOut}
-                          onChange={(e) => setCheckOut(e.target.value)}
-                          className="w-full px-3 py-2 border rounded-lg"
+                          type="text" 
+                          value={formatDate(checkOut)}
+                          readOnly
+                          className="w-full px-3 py-2 border rounded-lg bg-gray-100 cursor-not-allowed"
                         />
                       </div>
+                      
+                      <div className="p-3 bg-white rounded-lg">
+                        <p className="font-medium text-gray-700 mb-2">Booking Details:</p>
+                        <div className="space-y-1 text-sm">
+                          <p>👤 Adults: {adults}</p>
+                          {children.length > 0 && (
+                            <p>👶 Children: {children.length} ({children.map(c => c.age).join(', ')} yrs)</p>
+                          )}
+                          <p>📅 {calculateNights()} night(s)</p>
+                          <p>🏠 Room: {room.name}</p>
+                        </div>
+                      </div>
+                      
                       <div className="border-t pt-3">
                         <div className="flex justify-between mb-2">
                           <span>Rate per night:</span>
                           <span className="font-semibold">₱{room.price.toLocaleString()}</span>
                         </div>
+                        <div className="flex justify-between mb-2 text-sm text-gray-600">
+                          <span>Number of nights:</span>
+                          <span>{calculateNights()} nights</span>
+                        </div>
+                        <div className="flex justify-between mb-2 text-sm text-gray-600">
+                          <span>Subtotal:</span>
+                          <span>₱{(room.price * calculateNights()).toLocaleString()}</span>
+                        </div>
                         {additionalHeads > 0 && (
                           <div className="flex justify-between mb-2 text-sm text-gray-600">
-                            <span>Additional guests ({additionalHeads} × ₱1,500):</span>
-                            <span>₱{(additionalHeads * 1500).toLocaleString()}</span>
+                            <span>Additional guests ({additionalHeads} × ₱1,500 × {calculateNights()} nights):</span>
+                            <span>₱{(additionalHeads * 1500 * calculateNights()).toLocaleString()}</span>
                           </div>
                         )}
-                        <div className="flex justify-between font-bold text-lg border-t pt-2">
+                        <div className="flex justify-between font-bold text-lg border-t pt-2 mt-2">
                           <span>Total:</span>
-                          <span className="text-amber-600">₱{calculateTotal().toLocaleString()}</span>
+                          <span className="text-amber-600">₱{totalAmount.toLocaleString()}</span>
                         </div>
                       </div>
-                      <button className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg transition-all duration-300">
+                      
+                      <button 
+                        onClick={handleBookNow}
+                        disabled={!hasValidDates}
+                        className={`w-full py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
+                          hasValidDates 
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg cursor-pointer' 
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <Calendar size={18} />
                         Book Now
                       </button>
+                      
+                      {!hasValidDates && (
+                        <p className="text-xs text-gray-400 text-center mt-2">
+                          Please go back and search for availability
+                        </p>
+                      )}
                     </div>
                   </div>
+                  
+                  {onModifySearch && (
+                    <button 
+                      onClick={onModifySearch}
+                      className="w-full py-2 mb-4 border border-amber-500 text-amber-600 rounded-lg font-semibold hover:bg-amber-50 transition-all duration-300"
+                    >
+                      Modify Search
+                    </button>
+                  )}
                   
                   <div className="text-sm text-gray-600 space-y-2">
                     <p className="flex items-start gap-2">
@@ -235,6 +433,58 @@ const RoomCard = ({ room, type, onBookNow }) => {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Authentication Required Modal */}
+      {showAuthModal && bookingData && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full">
+            <div className="border-b p-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Login Required</h2>
+              <button onClick={() => setShowAuthModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <User size={32} className="text-amber-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800">Please sign in to continue</h3>
+                <p className="text-gray-500 text-sm mt-1">You need to be logged in to complete your booking</p>
+              </div>
+              
+              <div className="space-y-3">
+                <button 
+                  onClick={() => {
+                    // Save booking data to localStorage before redirecting
+                    localStorage.setItem('pendingBooking', JSON.stringify(bookingData))
+                    localStorage.setItem('redirectAfterLogin', '/rooms')
+                    navigate('/login')
+                  }}
+                  className="w-full py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg transition-all"
+                >
+                  Login to Your Account
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    localStorage.setItem('pendingBooking', JSON.stringify(bookingData))
+                    localStorage.setItem('redirectAfterLogin', '/rooms')
+                    navigate('/register')
+                  }}
+                  className="w-full py-2 border-2 border-amber-500 text-amber-600 rounded-lg font-semibold hover:bg-amber-50 transition-all"
+                >
+                  Create New Account
+                </button>
+              </div>
+              
+              <p className="text-center text-xs text-gray-400 mt-4">
+                By continuing, you agree to our Terms of Service and Privacy Policy
+              </p>
             </div>
           </div>
         </div>

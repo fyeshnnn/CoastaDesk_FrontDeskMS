@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { Menu, X, Home, Bed, Compass, Info, HelpCircle, Phone, Mail, Phone as PhoneIcon, MapPin, Waves, User, LogOut } from 'lucide-react'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom'
+import { Home, Bed, Compass, Info, HelpCircle, Phone, Mail, Phone as PhoneIcon, MapPin, Waves, User, LogOut } from 'lucide-react'
 import HomePage from './pages/HomePage'
 import RoomsPage from './pages/RoomsPage'
 import ActivitiesPage from './pages/ActivitiesPage'
@@ -14,6 +14,7 @@ import ManagerDashboard from './pages/dashboard/ManagerDashboard'
 import AdminDashboard from './pages/dashboard/AdminDashboard'
 import MyAccountPage from './pages/MyAccountPage'
 import SettingsPage from './pages/SettingsPage'
+import CustomerDashboard from './pages/dashboard/CustomerDashboard'
 
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
@@ -31,12 +32,12 @@ function ProtectedRoute({ children, allowedRoles }) {
 }
 
 function Navbar() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState('')
   const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -68,51 +69,71 @@ function Navbar() {
     window.location.href = '/'
   }
 
+  const handleLogoClick = (e) => {
+    e.preventDefault()
+    if (location.pathname === '/') {
+      // If already on home page, scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      // If on another page, navigate to home
+      navigate('/')
+      // Small delay to allow navigation before scrolling
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+    }
+  }
+
   // Don't show navbar on dashboard pages for staff/manager/admin
   const isDashboardPage = location.pathname.includes('/staff') || 
                           location.pathname.includes('/manager') || 
-                          location.pathname.includes('/admin')
+                          location.pathname.includes('/admin') ||
+                          location.pathname.includes('/login') ||
+                          location.pathname.includes('/register')
   
   if (isDashboardPage) {
     return null
   }
 
   const navItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/rooms', label: 'Rooms', icon: Bed },
-    { path: '/activities', label: 'Activities', icon: Compass },
-    { path: '/about', label: 'About Us', icon: Info },
-    { path: '/faq', label: 'FAQ', icon: HelpCircle },
-    { path: '/contact', label: 'Contact', icon: Phone }
+    { path: '/', label: 'Home' },
+    { path: '/rooms', label: 'Rooms' },
+    { path: '/activities', label: 'Activities' },
+    { path: '/about', label: 'About Us' },
+    { path: '/faq', label: 'FAQ' },
+    { path: '/contact', label: 'Contact' }
   ]
 
   return (
     <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-      scrolled ? 'bg-white shadow-lg py-3' : 'bg-white/95 backdrop-blur-md py-4'
+      scrolled ? 'bg-white shadow-lg py-3' : 'bg-white py-4'
     }`}>
-      <div className="container mx-auto px-4 md:px-6">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-3 md:gap-0">
+      <div className="container mx-auto px-6">
+        <div className="flex justify-between items-center">
           
-          {/* Logo Section */}
-          <Link to="/" className="flex items-center gap-2 cursor-pointer md:absolute md:left-6">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white text-lg md:text-xl font-bold">🌊</span>
+          {/* Logo Section - Clickable to go to home/top */}
+          <button 
+            onClick={handleLogoClick}
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+              <span className="text-white text-xl font-bold">🌊</span>
             </div>
             <div>
-              <h1 className="text-base md:text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
                 Costa Marina
               </h1>
-              <p className="text-[10px] md:text-xs text-gray-500 hidden sm:block">Beach Resort</p>
+              <p className="text-xs text-gray-500">Beach Resort</p>
             </div>
-          </Link>
+          </button>
 
           {/* Desktop Navigation - Centered */}
-          <div className="hidden md:flex items-center justify-center gap-1 flex-1">
+          <div className="flex items-center justify-center gap-1">
             {navItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative px-3 lg:px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                className={`relative px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
                   location.pathname === item.path 
                     ? 'text-amber-600 bg-amber-50' 
                     : 'text-gray-600 hover:text-amber-600 hover:bg-amber-50'
@@ -127,10 +148,10 @@ function Navbar() {
           </div>
 
           {/* Login/User Button */}
-          <div className="flex items-center gap-3 md:absolute md:right-6">
+          <div className="flex items-center gap-3">
             {isLoggedIn ? (
               <div className="flex items-center gap-3">
-                <div className="hidden md:flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center">
                     <User size={16} className="text-white" />
                   </div>
@@ -146,65 +167,14 @@ function Navbar() {
               </div>
             ) : (
               <Link to="/login">
-                <button className="hidden md:flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-medium hover:shadow-lg hover:scale-105 transition-all duration-300 text-sm">
+                <button className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-medium hover:shadow-lg hover:scale-105 transition-all duration-300 text-sm">
                   <span>🔑</span>
                   Login
                 </button>
               </Link>
             )}
-            
-            {/* Mobile Menu Button */}
-            <button 
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
           </div>
         </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden mt-4 pb-4 space-y-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`w-full px-4 py-3 rounded-lg font-medium transition-all flex items-center gap-3 ${
-                  location.pathname === item.path 
-                    ? 'text-amber-600 bg-amber-50' 
-                    : 'text-gray-600 hover:text-amber-600 hover:bg-amber-50'
-                }`}
-              >
-                <item.icon size={20} />
-                {item.label}
-              </Link>
-            ))}
-            {isLoggedIn ? (
-              <>
-                <div className="px-4 py-2 text-gray-600 flex items-center gap-2">
-                  <User size={20} />
-                  <span>Hi, {userName}</span>
-                </div>
-                <button 
-                  onClick={handleLogout}
-                  className="w-full px-4 py-3 bg-red-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
-                >
-                  <LogOut size={20} />
-                  Logout
-                </button>
-              </>
-            ) : (
-              <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-                <button className="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-medium flex items-center justify-center gap-2">
-                  <span>🔑</span>
-                  Login
-                </button>
-              </Link>
-            )}
-          </div>
-        )}
       </div>
     </nav>
   )
@@ -216,7 +186,9 @@ function Footer() {
   // Don't show footer on dashboard pages
   const isDashboardPage = location.pathname.includes('/staff') || 
                           location.pathname.includes('/manager') || 
-                          location.pathname.includes('/admin')
+                          location.pathname.includes('/admin') ||
+                          location.pathname.includes('/login') ||
+                          location.pathname.includes('/register')
   
   if (isDashboardPage) {
     return null
@@ -229,9 +201,9 @@ function Footer() {
   ]
 
   return (
-    <footer className="bg-gray-900 text-white py-12 px-4">
+    <footer className="bg-gray-900 text-white py-12 px-6">
       <div className="container mx-auto max-w-6xl">
-        <div className="grid md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-4 gap-8">
           
           <div>
             <div className="flex items-center gap-2 mb-4">
@@ -313,7 +285,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/my-account" element={<MyAccountPage />} />
-<Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           
           {/* Staff Dashboard Routes */}
           <Route path="/staff/*" element={
@@ -336,6 +308,11 @@ function App() {
             </ProtectedRoute>
           } />
           
+          <Route path="/customer/*" element={
+  <ProtectedRoute allowedRoles={['customer']}>
+    <CustomerDashboard />
+  </ProtectedRoute>
+} />
           {/* Public Routes with Navbar and Footer */}
           <Route path="/*" element={
             <>

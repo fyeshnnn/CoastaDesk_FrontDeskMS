@@ -1,29 +1,32 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { User, Mail, Lock, MapPin, Home, Building, Globe, Phone, CheckCircle, Eye, EyeOff, UserPlus } from 'lucide-react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { User, Mail, Lock, MapPin, Home, Building, Globe, Phone, CheckCircle, Eye, EyeOff, UserPlus, ArrowLeft } from 'lucide-react'
+import { authAPI } from '../services/api'
 
 function RegisterPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState({})
+  const [serverError, setServerError] = useState('')
   const [formData, setFormData] = useState({
-    firstName: '',
-    middleName: '',
-    lastName: '',
+    first_name: '',
+    middle_name: '',
+    last_name: '',
     address: '',
     unitBlkFlr: '',
     street: '',
     city: '',
     province: '',
-    zipCode: '',
+    zip_code: '',
     country: 'Philippines',
     username: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    password_confirmation: ''
   })
 
   const handleInputChange = (e) => {
@@ -32,18 +35,18 @@ function RegisterPage() {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
+    if (serverError) setServerError('')
   }
 
   const validateForm = () => {
     const newErrors = {}
 
-    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required'
-    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required'
+    if (!formData.first_name.trim()) newErrors.first_name = 'First name is required'
+    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required'
     if (!formData.address.trim()) newErrors.address = 'Address is required'
     if (!formData.city.trim()) newErrors.city = 'City is required'
     if (!formData.province.trim()) newErrors.province = 'Province is required'
-    if (!formData.zipCode.trim()) newErrors.zipCode = 'ZIP code is required'
-    if (!formData.country.trim()) newErrors.country = 'Country is required'
+    if (!formData.zip_code.trim()) newErrors.zip_code = 'ZIP code is required'
     
     if (!formData.username.trim()) {
       newErrors.username = 'Username is required'
@@ -63,8 +66,8 @@ function RegisterPage() {
       newErrors.password = 'Password must be at least 8 characters'
     }
     
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match'
+    if (formData.password !== formData.password_confirmation) {
+      newErrors.password_confirmation = 'Passwords do not match'
     }
     
     if (!agreeTerms) {
@@ -81,51 +84,95 @@ function RegisterPage() {
     if (!validateForm()) return
     
     setIsLoading(true)
+    setServerError('')
     
-    // Simulate API registration
-    setTimeout(() => {
-      // Store user in localStorage (in real app, this would be a POST request)
-      const newUser = {
+    try {
+      // Prepare data for API (combine address fields)
+      const fullAddress = [
+        formData.address,
+        formData.unitBlkFlr,
+        formData.street
+      ].filter(Boolean).join(', ')
+      
+      const requestData = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        middle_name: formData.middle_name || null,
         email: formData.email,
         username: formData.username,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        password: formData.password // In real app, hash this!
+        password: formData.password,
+        password_confirmation: formData.password_confirmation,
+        phone: '', // Optional - can be added later
+        address: fullAddress || formData.address,
+        city: formData.city,
+        province: formData.province,
+        zip_code: formData.zip_code,
+        country: formData.country,
       }
       
-      // Get existing users or initialize empty array
-      const existingUsers = JSON.parse(localStorage.getItem('users') || '[]')
-      const userExists = existingUsers.some(u => u.email === formData.email || u.username === formData.username)
+      const response = await authAPI.register(requestData)
       
-      if (userExists) {
-        setErrors({ general: 'User with this email or username already exists' })
-        setIsLoading(false)
-        return
+      if (response.data.token) {
+        // Store token and user data
+        localStorage.setItem('token', response.data.token)
+        localStorage.setItem('user', JSON.stringify(response.data.user))
+        localStorage.setItem('userRole', response.data.user.role)
+        
+        // Check if there's a pending booking
+        const pendingBooking = localStorage.getItem('pendingBooking')
+        const redirectAfterLogin = localStorage.getItem('redirectAfterLogin')
+        
+        if (pendingBooking && redirectAfterLogin) {
+          localStorage.removeItem('redirectAfterLogin')
+          navigate('/rooms')
+        } else {
+          navigate('/customer')
+        }
+      } else {
+        // If no token in response, just navigate to login
+        alert('Registration successful! Please login.')
+        navigate('/login')
       }
+    } catch (error) {
+      console.error('Registration error:', error)
       
-      existingUsers.push(newUser)
-      localStorage.setItem('users', JSON.stringify(existingUsers))
-      
-      // Show success message and redirect to login
-      alert('Registration successful! Please login with your new account.')
-      navigate('/login')
+      if (error.response?.data?.errors) {
+        // Laravel validation errors
+        const apiErrors = error.response.data.errors
+        const formattedErrors = {}
+        Object.keys(apiErrors).forEach(key => {
+          formattedErrors[key] = apiErrors[key][0]
+        })
+        setErrors(formattedErrors)
+      } else if (error.response?.data?.message) {
+        setServerError(error.response.data.message)
+      } else {
+        setServerError('Registration failed. Please try again.')
+      }
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
+  }
+
+  const handleGoBack = () => {
+    navigate('/')
   }
 
   return (
     <div className="min-h-screen flex">
-      {/* Left Side - Branding with Image Placeholder */}
+      {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        {/* Background Image Placeholder */}
         <div className="absolute inset-0 bg-gradient-to-br from-amber-900/80 to-orange-900/80 z-10"></div>
         <div className="absolute inset-0 bg-cover bg-center" 
              style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1568084680786-a84f91d1153c?w=1200)' }}>
-          {/* REPLACE WITH YOUR ACTUAL RESORT IMAGE */}
         </div>
         
-        {/* Content Overlay */}
         <div className="relative z-20 flex flex-col justify-center items-center text-white p-12 text-center w-full">
+          <button onClick={handleGoBack} className="absolute top-8 left-8 flex items-center gap-2 text-white/80 hover:text-white transition-colors">
+            <ArrowLeft size={20} />
+            Back to Home
+          </button>
+          
           <div className="mb-8">
             <div className="w-32 h-32 mx-auto mb-4 bg-white/20 rounded-3xl backdrop-blur-md flex items-center justify-center shadow-2xl">
               <span className="text-6xl">🌊</span>
@@ -151,6 +198,12 @@ function RegisterPage() {
       {/* Right Side - Registration Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-gradient-to-b from-amber-50 to-white overflow-y-auto">
         <div className="max-w-lg w-full py-8">
+          {/* Back button for mobile */}
+          <button onClick={handleGoBack} className="lg:hidden flex items-center gap-2 text-gray-500 mb-4 hover:text-amber-600 transition-colors">
+            <ArrowLeft size={18} />
+            Back
+          </button>
+
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-6">
             <div className="w-16 h-16 mx-auto mb-3 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
@@ -168,10 +221,10 @@ function RegisterPage() {
             <p className="text-gray-500 mt-2">Fill in your details to get started</p>
           </div>
 
-          {/* General Error */}
-          {errors.general && (
+          {/* Server Error */}
+          {serverError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-              {errors.general}
+              {serverError}
             </div>
           )}
 
@@ -190,23 +243,25 @@ function RegisterPage() {
                   </label>
                   <input
                     type="text"
-                    name="firstName"
-                    value={formData.firstName}
+                    name="first_name"
+                    value={formData.first_name}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.firstName ? 'border-red-500' : 'border-gray-300'}`}
+                    disabled={isLoading}
+                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.first_name ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="First name"
                   />
-                  {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
+                  {errors.first_name && <p className="text-red-500 text-xs mt-1">{errors.first_name}</p>}
                 </div>
 
                 <div>
                   <label className="block text-gray-700 font-medium text-sm mb-1">Middle Name</label>
                   <input
                     type="text"
-                    name="middleName"
-                    value={formData.middleName}
+                    name="middle_name"
+                    value={formData.middle_name}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none"
+                    disabled={isLoading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100"
                     placeholder="Middle name (optional)"
                   />
                 </div>
@@ -217,13 +272,14 @@ function RegisterPage() {
                   </label>
                   <input
                     type="text"
-                    name="lastName"
-                    value={formData.lastName}
+                    name="last_name"
+                    value={formData.last_name}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.lastName ? 'border-red-500' : 'border-gray-300'}`}
+                    disabled={isLoading}
+                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.last_name ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="Last name"
                   />
-                  {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
+                  {errors.last_name && <p className="text-red-500 text-xs mt-1">{errors.last_name}</p>}
                 </div>
               </div>
             </div>
@@ -244,7 +300,8 @@ function RegisterPage() {
                     name="address"
                     value={formData.address}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.address ? 'border-red-500' : 'border-gray-300'}`}
+                    disabled={isLoading}
+                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.address ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="House/Unit number and Street name"
                   />
                   {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
@@ -258,7 +315,8 @@ function RegisterPage() {
                       name="unitBlkFlr"
                       value={formData.unitBlkFlr}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none"
+                      disabled={isLoading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100"
                       placeholder="Unit/Block/Floor"
                     />
                   </div>
@@ -270,7 +328,8 @@ function RegisterPage() {
                       name="street"
                       value={formData.street}
                       onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none"
+                      disabled={isLoading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100"
                       placeholder="Street name"
                     />
                   </div>
@@ -286,7 +345,8 @@ function RegisterPage() {
                       name="city"
                       value={formData.city}
                       onChange={handleInputChange}
-                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.city ? 'border-red-500' : 'border-gray-300'}`}
+                      disabled={isLoading}
+                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.city ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="City"
                     />
                     {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
@@ -301,7 +361,8 @@ function RegisterPage() {
                       name="province"
                       value={formData.province}
                       onChange={handleInputChange}
-                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.province ? 'border-red-500' : 'border-gray-300'}`}
+                      disabled={isLoading}
+                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.province ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Province"
                     />
                     {errors.province && <p className="text-red-500 text-xs mt-1">{errors.province}</p>}
@@ -315,28 +376,27 @@ function RegisterPage() {
                     </label>
                     <input
                       type="text"
-                      name="zipCode"
-                      value={formData.zipCode}
+                      name="zip_code"
+                      value={formData.zip_code}
                       onChange={handleInputChange}
-                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.zipCode ? 'border-red-500' : 'border-gray-300'}`}
+                      disabled={isLoading}
+                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.zip_code ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="ZIP code"
                     />
-                    {errors.zipCode && <p className="text-red-500 text-xs mt-1">{errors.zipCode}</p>}
+                    {errors.zip_code && <p className="text-red-500 text-xs mt-1">{errors.zip_code}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 font-medium text-sm mb-1">
-                      Country <span className="text-red-500">*</span>
-                    </label>
+                    <label className="block text-gray-700 font-medium text-sm mb-1">Country</label>
                     <input
                       type="text"
                       name="country"
                       value={formData.country}
                       onChange={handleInputChange}
-                      className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.country ? 'border-red-500' : 'border-gray-300'}`}
+                      disabled={isLoading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100"
                       placeholder="Country"
                     />
-                    {errors.country && <p className="text-red-500 text-xs mt-1">{errors.country}</p>}
                   </div>
                 </div>
               </div>
@@ -358,7 +418,8 @@ function RegisterPage() {
                     name="username"
                     value={formData.username}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.username ? 'border-red-500' : 'border-gray-300'}`}
+                    disabled={isLoading}
+                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.username ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="Choose a username"
                   />
                   {errors.username && <p className="text-red-500 text-xs mt-1">{errors.username}</p>}
@@ -373,7 +434,8 @@ function RegisterPage() {
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                    disabled={isLoading}
+                    className={`w-full px-3 py-2 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="your@email.com"
                   />
                   {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
@@ -382,7 +444,7 @@ function RegisterPage() {
                 <div>
                   <label className="block text-gray-700 font-medium text-sm mb-1">
                     Password <span className="text-red-500">*</span>
-                    <span className="text-xs text-gray-500 ml-2">(Must at least 8 characters)</span>
+                    <span className="text-xs text-gray-500 ml-2">(Must be at least 8 characters)</span>
                   </label>
                   <div className="relative">
                     <input
@@ -390,13 +452,15 @@ function RegisterPage() {
                       name="password"
                       value={formData.password}
                       onChange={handleInputChange}
-                      className={`w-full px-3 py-2 pr-10 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.password ? 'border-red-500' : 'border-gray-300'}`}
+                      disabled={isLoading}
+                      className={`w-full px-3 py-2 pr-10 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.password ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Create a password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      disabled={isLoading}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -411,21 +475,23 @@ function RegisterPage() {
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
-                      name="confirmPassword"
-                      value={formData.confirmPassword}
+                      name="password_confirmation"
+                      value={formData.password_confirmation}
                       onChange={handleInputChange}
-                      className={`w-full px-3 py-2 pr-10 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'}`}
+                      disabled={isLoading}
+                      className={`w-full px-3 py-2 pr-10 border rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all outline-none disabled:bg-gray-100 ${errors.password_confirmation ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="Confirm your password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      disabled={isLoading}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                     >
                       {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
+                  {errors.password_confirmation && <p className="text-red-500 text-xs mt-1">{errors.password_confirmation}</p>}
                 </div>
               </div>
             </div>
@@ -437,7 +503,8 @@ function RegisterPage() {
                 id="terms"
                 checked={agreeTerms}
                 onChange={(e) => setAgreeTerms(e.target.checked)}
-                className="mt-1 w-4 h-4 text-amber-500 rounded focus:ring-amber-500"
+                disabled={isLoading}
+                className="mt-1 w-4 h-4 text-amber-500 rounded focus:ring-amber-500 disabled:opacity-50"
               />
               <label htmlFor="terms" className="text-sm text-gray-600">
                 I agree to the <a href="#" className="text-amber-600 hover:underline">Terms & Policy</a> and 
@@ -450,10 +517,13 @@ function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Creating Account...
+                </>
               ) : (
                 <>
                   <UserPlus size={20} />
